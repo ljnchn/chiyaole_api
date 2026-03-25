@@ -1,6 +1,16 @@
 const WX_APPID = process.env.WX_APPID || "wx_test_appid";
 const WX_SECRET = process.env.WX_SECRET || "wx_test_secret";
 
+export class WechatApiError extends Error {
+  public readonly errcode: number;
+
+  constructor(errcode: number, errmsg: string) {
+    super(errmsg);
+    this.name = "WechatApiError";
+    this.errcode = errcode;
+  }
+}
+
 interface Code2SessionResult {
   openid: string;
   session_key: string;
@@ -24,7 +34,7 @@ export async function code2Session(
   const data = (await res.json()) as Code2SessionResult;
 
   if (data.errcode) {
-    throw new Error(`WeChat API error: ${data.errcode} ${data.errmsg}`);
+    throw new WechatApiError(data.errcode, data.errmsg || "微信接口错误");
   }
 
   return data;
