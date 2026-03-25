@@ -1,0 +1,22 @@
+{
+  "name": "chiyaole-server",
+  "version": "1.0.0",
+  "description": "吃药了 - 微信小程序服药提醒后台 API",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "build": "bun build --compile src/index.ts --outfile chiyaole-server",
+    "test": "bun test",
+    "lint": "bunx --bun tsc --noEmit",
+    "seed": "bun run src/db/seed.ts"
+  },
+  "dependencies": {
+    "hono": "^4.7.0",
+    "nanoid": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.8.0"
+  }
+}
