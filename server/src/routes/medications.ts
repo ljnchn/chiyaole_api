@@ -6,6 +6,7 @@ import {
   requireString,
   optionalString,
   optionalEnum,
+  optionalBoolean,
   optionalNumber,
   optionalTimeArray,
   requireNumber,
@@ -29,6 +30,14 @@ function formatMedication(row: Record<string, unknown>) {
     times: JSON.parse((row.times as string) || "[]"),
     withFood: row.with_food,
     status: row.status,
+    lowStockEnabled:
+      row.low_stock_enabled === undefined || row.low_stock_enabled === null
+        ? true
+        : Number(row.low_stock_enabled) === 1,
+    lowStockThreshold:
+      row.low_stock_threshold === undefined || row.low_stock_threshold === null
+        ? null
+        : Number(row.low_stock_threshold),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -68,7 +77,15 @@ medications.get("/stats", async (c) => {
         COUNT(*) AS total,
         SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active,
         SUM(CASE WHEN status = 'paused' THEN 1 ELSE 0 END) AS paused,
-        SUM(CASE WHEN status = 'active' AND total > 0 AND CAST(remaining AS REAL) / total < 0.2 THEN 1 ELSE 0 END) AS lowStock
+        SUM(
+          CASE
+            WHEN status = 'active' AND low_stock_enabled = 1 AND (
+              (low_stock_threshold IS NOT NULL AND remaining <= low_stock_threshold)
+              OR (low_stock_threshold IS NULL AND total > 0 AND CAST(remaining AS REAL) / total < 0.2)
+            )
+            THEN 1 ELSE 0
+          END
+        ) AS lowStock
       FROM medications WHERE user_id = ?`
     )
     .get(userId) as Record<string, unknown>;
@@ -142,11 +159,20 @@ medications.post("/", async (c) => {
       "",
     ]) || "";
 
+  const lowStockEnabled = optionalBoolean(
+    body.lowStockEnabled,
+    "lowStockEnabled"
+  ) ?? true;
+  const lowStockThreshold =
+    body.lowStockThreshold === undefined || body.lowStockThreshold === null
+      ? null
+      : requireNumber(body.lowStockThreshold, "lowStockThreshold", 0);
+
   const id = generateId("m");
 
   db.run(
-    `INSERT INTO medications (id, user_id, name, dosage, specification, icon, color, remark, remaining, total, unit, times, with_food, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
+    `INSERT INTO medications (id, user_id, name, dosage, specification, icon, color, remark, remaining, total, unit, times, with_food, status, low_stock_enabled, low_stock_threshold)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
     [
       id,
       userId,
@@ -161,12 +187,14 @@ medications.post("/", async (c) => {
       unit,
       JSON.stringify(times),
       withFood,
+      lowStockEnabled ? 1 : 0,
+      lowStockThreshold,
     ]
   );
 
   const med = db
-    .query("SELECT * FROM medications WHERE id = ?")
-    .get(id) as Record<string, unknown>;
+    .query("SELECT * FROM medications WHERE id = ? AND user_id = ?")
+    .get(id, userId) as Record<string, unknown>;
 
   return success(c, formatMedication(med), 201);
 });
@@ -246,6 +274,25 @@ medications.patch("/:id", async (c) => {
     }
   }
 
+  if (body.lowStockEnabled !== undefined) {
+    const val = optionalBoolean(body.lowStockEnabled, "lowStockEnabled");
+    if (val !== undefined) {
+      updates.push("low_stock_enabled = ?");
+      values.push(val ? 1 : 0);
+    }
+  }
+
+  if (body.lowStockThreshold !== undefined) {
+    if (body.lowStockThreshold === null) {
+      updates.push("low_stock_threshold = ?");
+      values.push(null);
+    } else {
+      const v = requireNumber(body.lowStockThreshold, "lowStockThreshold", 0);
+      updates.push("low_stock_threshold = ?");
+      values.push(v);
+    }
+  }
+
   if (updates.length === 0) {
     return error(c, 40001, "参数错误：未提供要更新的字段");
   }
@@ -259,8 +306,8 @@ medications.patch("/:id", async (c) => {
   );
 
   const updated = db
-    .query("SELECT * FROM medications WHERE id = ?")
-    .get(id) as Record<string, unknown>;
+    .query("SELECT * FROM medications WHERE id = ? AND user_id = ?")
+    .get(id, userId) as Record<string, unknown>;
 
   return success(c, formatMedication(updated));
 });
@@ -302,17 +349,35 @@ medications.patch("/:id/stock", async (c) => {
   );
 
   const updated = db
-    .query("SELECT * FROM medications WHERE id = ?")
-    .get(id) as Record<string, unknown>;
+    .query("SELECT * FROM medications WHERE id = ? AND user_id = ?")
+    .get(id, userId) as Record<string, unknown>;
 
   const remaining = updated.remaining as number;
   const total = updated.total as number;
+  const status = updated.status as string;
+  const lowStockEnabled =
+    updated.low_stock_enabled === undefined || updated.low_stock_enabled === null
+      ? true
+      : Number(updated.low_stock_enabled) === 1;
+  const lowStockThreshold =
+    updated.low_stock_threshold === undefined ||
+    updated.low_stock_threshold === null
+      ? null
+      : Number(updated.low_stock_threshold);
+
+  const lowStock =
+    lowStockEnabled &&
+    status === "active" &&
+    ((lowStockThreshold !== null && remaining <= lowStockThreshold) ||
+      (lowStockThreshold === null &&
+        total > 0 &&
+        remaining / total < 0.2));
 
   return success(c, {
     id,
     remaining,
     total,
-    lowStock: total > 0 && remaining / total < 0.2,
+    lowStock,
   });
 });
 

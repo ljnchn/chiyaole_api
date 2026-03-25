@@ -139,6 +139,8 @@ CREATE TABLE medications (
   times         TEXT DEFAULT '[]',  -- JSON array ["08:00","20:00"]
   with_food     TEXT DEFAULT '',    -- before/after/empty/''
   status        TEXT DEFAULT 'active',  -- active/paused/completed
+  low_stock_enabled  INTEGER DEFAULT 1,     -- 是否启用库存预警
+  low_stock_threshold INTEGER DEFAULT NULL, -- 预警数量：remaining <= threshold 时告急；为 NULL 则按 remaining/total < 0.2 回退
   created_at    TEXT DEFAULT (datetime('now')),
   updated_at    TEXT DEFAULT (datetime('now'))
 );
@@ -382,7 +384,14 @@ SELECT
   COUNT(*) AS total,
   SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active,
   SUM(CASE WHEN status = 'paused' THEN 1 ELSE 0 END) AS paused,
-  SUM(CASE WHEN status = 'active' AND total > 0 AND CAST(remaining AS REAL) / total < 0.2 THEN 1 ELSE 0 END) AS lowStock
+  SUM(
+    CASE
+      WHEN status = 'active' AND low_stock_enabled = 1 AND (
+        (low_stock_threshold IS NOT NULL AND remaining <= low_stock_threshold)
+        OR (low_stock_threshold IS NULL AND total > 0 AND CAST(remaining AS REAL) / total < 0.2)
+      ) THEN 1 ELSE 0
+    END
+  ) AS lowStock
 FROM medications WHERE user_id = ?
 ```
 
@@ -441,7 +450,9 @@ SELECT * FROM checkins WHERE medication_id = ? AND user_id = ? ORDER BY created_
   "total": 24,
   "unit": "粒",
   "times": ["08:00", "20:00"],
-  "withFood": "after"
+  "withFood": "after",
+  "lowStockEnabled": true,
+  "lowStockThreshold": 5
 }
 ```
 
@@ -455,14 +466,18 @@ SELECT * FROM checkins WHERE medication_id = ? AND user_id = ? ORDER BY created_
 | color | 可选，hex 格式，默认 `#0058bc` |
 | times | 可选，数组，元素格式 HH:mm |
 | withFood | 可选，枚举：`before` / `after` / `empty` / `''` |
+| lowStockEnabled | 可选，布尔值，默认 true |
+| lowStockThreshold | 可选，>= 0，默认 null；当为 null 时回退到 remaining/total < 0.2 |
 | remaining | 可选，≥ 0，默认 0 |
 | total | 可选，≥ 0，默认 0 |
 
 **响应：** 返回完整药品对象（含服务端生成的 `id`, `createdAt`, `updatedAt`）。
+> 返回的药品对象包含库存预警配置：`lowStockEnabled` / `lowStockThreshold`（当 `lowStockThreshold` 为 `NULL` 时，告急判断会回退到 `remaining/total < 0.2`）。
 
 ### PATCH /medications/:id
 
 更新药品（部分更新，仅传需要修改的字段）。
+> 可更新库存预警配置字段：`lowStockEnabled` / `lowStockThreshold`。
 
 **请求示例：**
 

@@ -6,3 +6,4 @@ data/
 *.tsbuildinfo
 dist/
 chiyaole-server
+.env

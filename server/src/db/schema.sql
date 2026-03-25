@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS medications (
   times         TEXT DEFAULT '[]',
   with_food     TEXT DEFAULT '',
   status        TEXT DEFAULT 'active',
+  low_stock_enabled  INTEGER DEFAULT 1,     -- 是否启用库存预警
+  low_stock_threshold INTEGER DEFAULT NULL, -- 预警数量：remaining <= threshold 时告急；为 NULL 则按 remaining/total < 0.2 回退
   created_at    TEXT DEFAULT (datetime('now')),
   updated_at    TEXT DEFAULT (datetime('now'))
 );

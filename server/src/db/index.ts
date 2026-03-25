@@ -46,10 +46,28 @@ export function migrate() {
     times         TEXT DEFAULT '[]',
     with_food     TEXT DEFAULT '',
     status        TEXT DEFAULT 'active',
+    low_stock_enabled  INTEGER DEFAULT 1,
+    low_stock_threshold INTEGER DEFAULT NULL,
     created_at    TEXT DEFAULT (datetime('now')),
     updated_at    TEXT DEFAULT (datetime('now'))
   )`);
   db.run("CREATE INDEX IF NOT EXISTS idx_med_user_status ON medications(user_id, status)");
+
+  // 兼容已有数据库：旧库可能没有 low_stock_* 字段
+  const medCols = db
+    .query("PRAGMA table_info(medications)")
+    .all() as { name: string }[];
+  const colNames = new Set(medCols.map((c) => c.name));
+  if (!colNames.has("low_stock_enabled")) {
+    db.run(
+      "ALTER TABLE medications ADD COLUMN low_stock_enabled INTEGER DEFAULT 1"
+    );
+  }
+  if (!colNames.has("low_stock_threshold")) {
+    db.run(
+      "ALTER TABLE medications ADD COLUMN low_stock_threshold INTEGER DEFAULT NULL"
+    );
+  }
 
   db.run(`CREATE TABLE IF NOT EXISTS checkins (
     id              TEXT PRIMARY KEY,
