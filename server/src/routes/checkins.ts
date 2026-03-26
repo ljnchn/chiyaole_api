@@ -222,9 +222,9 @@ checkins.get("/today", async (c) => {
 
   const meds = db
     .query(
-      "SELECT id, name, dosage, icon, color, times FROM medications WHERE user_id = ? AND status = 'active'"
+      "SELECT id, name, dosage, icon, color, times FROM medications WHERE user_id = ? AND status = 'active' AND start_date <= ?"
     )
-    .all(userId) as Record<string, unknown>[];
+    .all(userId, today) as Record<string, unknown>[];
 
   const todayCheckins = db
     .query(

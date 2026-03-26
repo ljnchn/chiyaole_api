@@ -23,6 +23,8 @@ CREATE TABLE IF NOT EXISTS medications (
   user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name          TEXT NOT NULL,
   dosage        TEXT NOT NULL,
+  frequency     TEXT DEFAULT '1日3次' CHECK (frequency IN ('1日1次', '1日2次', '1日3次', '1日4次', '隔日1次', '每周1次', '必要时')),
+  start_date    TEXT NOT NULL DEFAULT (date('now')),
   specification TEXT DEFAULT '',
   icon          TEXT DEFAULT 'pill',
   color         TEXT DEFAULT '#0058bc',
@@ -31,7 +33,7 @@ CREATE TABLE IF NOT EXISTS medications (
   total         INTEGER DEFAULT 0,
   unit          TEXT DEFAULT '片',
   times         TEXT DEFAULT '[]',
-  with_food     TEXT DEFAULT '',
+  with_food     TEXT DEFAULT '' CHECK (with_food IN ('', 'before', 'with', 'after', 'sleep')),
   status        TEXT DEFAULT 'active',
   low_stock_enabled  INTEGER DEFAULT 1,     -- 是否启用库存预警
   low_stock_threshold INTEGER DEFAULT NULL, -- 预警数量：remaining <= threshold 时告急；为 NULL 则按 remaining/total < 0.2 回退

@@ -9,17 +9,30 @@ import {
   optionalBoolean,
   optionalNumber,
   optionalTimeArray,
+  optionalDate,
   requireNumber,
 } from "../utils/validate";
 
 type Variables = { userId: string };
 const medications = new Hono<{ Variables: Variables }>();
+const FOOD_OPTIONS = ["", "before", "with", "after", "sleep"] as const;
+const FREQ_OPTIONS = [
+  "1日1次",
+  "1日2次",
+  "1日3次",
+  "1日4次",
+  "隔日1次",
+  "每周1次",
+  "必要时",
+] as const;
 
 function formatMedication(row: Record<string, unknown>) {
   return {
     id: row.id,
     name: row.name,
     dosage: row.dosage,
+    frequency: row.frequency,
+    startDate: row.start_date,
     specification: row.specification,
     icon: row.icon,
     color: row.color,
@@ -137,6 +150,11 @@ medications.post("/", async (c) => {
 
   const name = requireString(body.name, "name", 1, 50);
   const dosage = requireString(body.dosage, "dosage", 1, 20);
+  const frequency =
+    optionalEnum(body.frequency, "frequency", [...FREQ_OPTIONS]) || "1日3次";
+  const startDate =
+    optionalDate(body.startDate, "startDate") ||
+    new Date().toISOString().split("T")[0];
   const specification = optionalString(body.specification, "specification", 100) || "";
   const icon =
     optionalEnum(body.icon, "icon", [
@@ -151,13 +169,7 @@ medications.post("/", async (c) => {
   const total = optionalNumber(body.total, "total", 0) ?? 0;
   const unit = optionalString(body.unit, "unit", 10) || "片";
   const times = optionalTimeArray(body.times, "times") || [];
-  const withFood =
-    optionalEnum(body.withFood, "withFood", [
-      "before",
-      "after",
-      "empty",
-      "",
-    ]) || "";
+  const withFood = optionalEnum(body.withFood, "withFood", [...FOOD_OPTIONS]) || "";
 
   const lowStockEnabled = optionalBoolean(
     body.lowStockEnabled,
@@ -171,13 +183,15 @@ medications.post("/", async (c) => {
   const id = generateId("m");
 
   db.run(
-    `INSERT INTO medications (id, user_id, name, dosage, specification, icon, color, remark, remaining, total, unit, times, with_food, status, low_stock_enabled, low_stock_threshold)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
+    `INSERT INTO medications (id, user_id, name, dosage, frequency, start_date, specification, icon, color, remark, remaining, total, unit, times, with_food, status, low_stock_enabled, low_stock_threshold)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
     [
       id,
       userId,
       name,
       dosage,
+      frequency,
+      startDate,
       specification,
       icon,
       color,
@@ -218,6 +232,7 @@ medications.patch("/:id", async (c) => {
   const fields: [string, string, string | number | undefined][] = [
     ["name", "name", optionalString(body.name, "name", 50)],
     ["dosage", "dosage", optionalString(body.dosage, "dosage", 20)],
+    ["frequency", "frequency", optionalEnum(body.frequency, "frequency", [...FREQ_OPTIONS])],
     [
       "specification",
       "specification",
@@ -241,12 +256,7 @@ medications.patch("/:id", async (c) => {
     [
       "with_food",
       "withFood",
-      optionalEnum(body.withFood, "withFood", [
-        "before",
-        "after",
-        "empty",
-        "",
-      ]),
+      optionalEnum(body.withFood, "withFood", [...FOOD_OPTIONS]),
     ],
     [
       "status",
@@ -258,6 +268,12 @@ medications.patch("/:id", async (c) => {
       ]),
     ],
   ];
+
+  const startDate = optionalDate(body.startDate, "startDate");
+  if (startDate !== undefined) {
+    updates.push("start_date = ?");
+    values.push(startDate);
+  }
 
   for (const [col, , val] of fields) {
     if (val !== undefined) {

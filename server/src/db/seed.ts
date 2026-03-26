@@ -31,13 +31,15 @@ db.run(
 );
 
 db.run(
-  `INSERT INTO medications (id, user_id, name, dosage, specification, icon, color, remaining, total, unit, times, with_food, status)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  `INSERT INTO medications (id, user_id, name, dosage, frequency, start_date, specification, icon, color, remaining, total, unit, times, with_food, status, low_stock_enabled, low_stock_threshold)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   [
     medId1,
     userId,
     "阿莫西林胶囊",
     "1粒",
+    "1日2次",
+    "2026-03-01",
     "0.25g x 24粒",
     "capsule",
     "#0058bc",
@@ -47,17 +49,21 @@ db.run(
     JSON.stringify(["08:00", "20:00"]),
     "after",
     "active",
+    1,
+    5,
   ]
 );
 
 db.run(
-  `INSERT INTO medications (id, user_id, name, dosage, specification, icon, color, remaining, total, unit, times, with_food, status)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  `INSERT INTO medications (id, user_id, name, dosage, frequency, start_date, specification, icon, color, remaining, total, unit, times, with_food, status, low_stock_enabled, low_stock_threshold)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   [
     medId2,
     userId,
     "布洛芬缓释胶囊",
     "1粒",
+    "1日1次",
+    "2026-03-10",
     "0.3g x 20粒",
     "pill",
     "#e74c3c",
@@ -67,6 +73,8 @@ db.run(
     JSON.stringify(["12:00"]),
     "after",
     "active",
+    1,
+    null,
   ]
 );
 

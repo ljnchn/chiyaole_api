@@ -23,7 +23,6 @@
 
 - RESTful 风格，JSON 请求/响应
 - 所有接口需认证（除 `/auth/login` 外）
-- 本地优先：客户端优先读写 Storage，写操作异步同步至服务端
 - 幂等设计：打卡等操作支持重复提交不产生副作用
 - SQLite WAL 模式，支持并发读
 
@@ -129,6 +128,8 @@ CREATE TABLE medications (
   user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name          TEXT NOT NULL,
   dosage        TEXT NOT NULL,
+  frequency     TEXT DEFAULT '1日3次', -- 1日1次/1日2次/1日3次/1日4次/隔日1次/每周1次/必要时
+  start_date    TEXT NOT NULL DEFAULT (date('now')), -- YYYY-MM-DD
   specification TEXT DEFAULT '',
   icon          TEXT DEFAULT 'pill',
   color         TEXT DEFAULT '#0058bc',
@@ -137,7 +138,7 @@ CREATE TABLE medications (
   total         INTEGER DEFAULT 0,
   unit          TEXT DEFAULT '片',
   times         TEXT DEFAULT '[]',  -- JSON array ["08:00","20:00"]
-  with_food     TEXT DEFAULT '',    -- before/after/empty/''
+  with_food     TEXT DEFAULT '',    -- ''/before/with/after/sleep
   status        TEXT DEFAULT 'active',  -- active/paused/completed
   low_stock_enabled  INTEGER DEFAULT 1,     -- 是否启用库存预警
   low_stock_threshold INTEGER DEFAULT NULL, -- 预警数量：remaining <= threshold 时告急；为 NULL 则按 remaining/total < 0.2 回退
@@ -354,6 +355,8 @@ SELECT * FROM medications WHERE user_id = ? AND (? IS NULL OR status = ?) ORDER 
         "id": "m_abc123",
         "name": "阿莫西林胶囊",
         "dosage": "1粒",
+        "frequency": "1日3次",
+        "startDate": "2026-03-01",
         "specification": "0.25g x 24粒",
         "icon": "capsule",
         "color": "#0058bc",
@@ -442,6 +445,8 @@ SELECT * FROM checkins WHERE medication_id = ? AND user_id = ? ORDER BY created_
 {
   "name": "阿莫西林胶囊",
   "dosage": "1粒",
+  "frequency": "1日3次",
+  "startDate": "2026-03-01",
   "specification": "0.25g x 24粒",
   "icon": "capsule",
   "color": "#0058bc",
@@ -462,10 +467,12 @@ SELECT * FROM checkins WHERE medication_id = ? AND user_id = ? ORDER BY created_
 |------|------|
 | name | 必填，1-50 字符 |
 | dosage | 必填，1-20 字符 |
+| frequency | 可选，枚举：`1日1次` / `1日2次` / `1日3次` / `1日4次` / `隔日1次` / `每周1次` / `必要时`，默认 `1日3次` |
+| startDate | 可选，格式 `YYYY-MM-DD`，默认当天；开始日期之前不生成待打卡/漏服 |
 | icon | 可选，枚举：`pill` / `capsule` / `tablet` / `spray`，默认 `pill` |
 | color | 可选，hex 格式，默认 `#0058bc` |
 | times | 可选，数组，元素格式 HH:mm |
-| withFood | 可选，枚举：`before` / `after` / `empty` / `''` |
+| withFood | 可选，枚举：`''` / `before` / `with` / `after` / `sleep` |
 | lowStockEnabled | 可选，布尔值，默认 true |
 | lowStockThreshold | 可选，>= 0，默认 null；当为 null 时回退到 remaining/total < 0.2 |
 | remaining | 可选，≥ 0，默认 0 |
@@ -478,6 +485,7 @@ SELECT * FROM checkins WHERE medication_id = ? AND user_id = ? ORDER BY created_
 
 更新药品（部分更新，仅传需要修改的字段）。
 > 可更新库存预警配置字段：`lowStockEnabled` / `lowStockThreshold`。
+> 可更新起始日期字段：`startDate`（开始日期之前不生成待打卡/漏服）。
 
 **请求示例：**
 
@@ -995,22 +1003,4 @@ module.exports = {
   patch: (path, data) => request('PATCH', path, data),
   delete: (path) => request('DELETE', path, null)
 }
-```
-
-### 渐进式迁移
-
-```
-阶段 A：登录 + 写操作同步
-  - /auth/login 获取 token
-  - 打卡/添加药品：先写 Storage，再异步 POST 到服务端
-  - 读取仍走 Storage
-
-阶段 B：读写双通道
-  - onShow 时从 API 拉最新数据覆盖 Storage
-  - 弱网降级到本地
-
-阶段 C：服务端优先
-  - 所有读写走 API
-  - Storage 仅作缓存层
-  - 多端数据同步
 ```

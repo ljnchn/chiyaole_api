@@ -36,6 +36,8 @@ export function migrate() {
     user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name          TEXT NOT NULL,
     dosage        TEXT NOT NULL,
+    frequency     TEXT DEFAULT '1日3次' CHECK (frequency IN ('1日1次', '1日2次', '1日3次', '1日4次', '隔日1次', '每周1次', '必要时')),
+    start_date    TEXT NOT NULL DEFAULT (date('now')),
     specification TEXT DEFAULT '',
     icon          TEXT DEFAULT 'pill',
     color         TEXT DEFAULT '#0058bc',
@@ -44,7 +46,7 @@ export function migrate() {
     total         INTEGER DEFAULT 0,
     unit          TEXT DEFAULT '片',
     times         TEXT DEFAULT '[]',
-    with_food     TEXT DEFAULT '',
+    with_food     TEXT DEFAULT '' CHECK (with_food IN ('', 'before', 'with', 'after', 'sleep')),
     status        TEXT DEFAULT 'active',
     low_stock_enabled  INTEGER DEFAULT 1,
     low_stock_threshold INTEGER DEFAULT NULL,
@@ -52,22 +54,6 @@ export function migrate() {
     updated_at    TEXT DEFAULT (datetime('now'))
   )`);
   db.run("CREATE INDEX IF NOT EXISTS idx_med_user_status ON medications(user_id, status)");
-
-  // 兼容已有数据库：旧库可能没有 low_stock_* 字段
-  const medCols = db
-    .query("PRAGMA table_info(medications)")
-    .all() as { name: string }[];
-  const colNames = new Set(medCols.map((c) => c.name));
-  if (!colNames.has("low_stock_enabled")) {
-    db.run(
-      "ALTER TABLE medications ADD COLUMN low_stock_enabled INTEGER DEFAULT 1"
-    );
-  }
-  if (!colNames.has("low_stock_threshold")) {
-    db.run(
-      "ALTER TABLE medications ADD COLUMN low_stock_threshold INTEGER DEFAULT NULL"
-    );
-  }
 
   db.run(`CREATE TABLE IF NOT EXISTS checkins (
     id              TEXT PRIMARY KEY,
